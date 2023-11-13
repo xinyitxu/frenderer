@@ -13,7 +13,7 @@ fn main() {
     let mut frend = frenderer::with_default_runtime(&window);
     let mut input = input::Input::default();
     let fox = cache
-        .load::<assets_manager::asset::Gltf>("khronos.Fox.glTF-Binary.Fox")
+        .load::<assets_manager::asset::Gltf>("Fox")
         .unwrap();
 
     let mut camera = Camera3D {
