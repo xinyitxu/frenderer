@@ -1,6 +1,90 @@
-use frenderer::{input, Camera3D, Transform3D};
+use assets_manager::AssetCache;
+use frenderer::{
+    input, meshes::MeshGroup, Camera3D, PollsterRuntime, Renderer, SpriteRenderer, Transform3D,
+};
 use glam::*;
-use rand::Rng;
+use rand::{rngs::ThreadRng, Rng};
+
+/*
+create mesh for specified sprite
+@params:
+    - sprite (GameObject): has information to create sprite texture
+ */
+fn create_mesh(
+    cache: &AssetCache,
+    frend: &mut Renderer<PollsterRuntime>,
+    sprite: &str,
+) -> MeshGroup {
+    let sprite_gltf = cache.load::<assets_manager::asset::Gltf>(&sprite).unwrap();
+    let game_sprite = sprite_gltf.read();
+    let sprite_img = game_sprite.get_image_by_index(0);
+    let sprite_tex = frend.gpu.create_array_texture(
+        &[&sprite_img.to_rgba8()],
+        frenderer::wgpu::TextureFormat::Rgba8Unorm,
+        (sprite_img.width(), sprite_img.height()),
+        Some("texture"), // string concatenation
+    );
+
+    const COUNT: usize = 10;
+    let prim = game_sprite
+        .document
+        .meshes()
+        .next()
+        .unwrap()
+        .primitives()
+        .next()
+        .unwrap();
+    let reader = prim.reader(|b| Some(game_sprite.get_buffer_by_index(b.index())));
+
+    let verts: Vec<_> = reader
+        .read_positions()
+        .unwrap()
+        .zip(reader.read_tex_coords(0).unwrap().into_f32())
+        .map(|(position, uv)| frenderer::meshes::Vertex {
+            position,
+            uv,
+            which: 0,
+        })
+        .collect();
+    let vert_count = verts.len();
+
+    let sprite_mesh = frend.meshes.add_mesh_group(
+        &frend.gpu,
+        &sprite_tex,
+        verts,
+        (0..vert_count as u32).collect(),
+        vec![frenderer::meshes::MeshEntry {
+            instance_count: COUNT as u32,
+            submeshes: vec![frenderer::meshes::SubmeshEntry {
+                vertex_base: 0,
+                indices: 0..vert_count as u32,
+            }],
+        }],
+    );
+    return sprite_mesh;
+}
+
+fn transform_mesh(mut rng: ThreadRng, frend: &mut Renderer<PollsterRuntime>, mesh: MeshGroup) {
+    for trf in frend.meshes.get_meshes_mut(mesh, 0) {
+        *trf = Transform3D {
+            translation: Vec3 {
+                x: rng.gen_range(-400.0..400.0),
+                y: rng.gen_range(-300.0..300.0),
+                z: rng.gen_range(100.0..500.0),
+            }
+            .into(),
+            rotation: Quat::from_euler(
+                EulerRot::XYZ,
+                rng.gen_range(0.0..std::f32::consts::TAU),
+                rng.gen_range(0.0..std::f32::consts::TAU),
+                rng.gen_range(0.0..std::f32::consts::TAU),
+            )
+            .into(),
+            scale: rng.gen_range(0.5..1.0),
+        };
+    }
+    frend.meshes.upload_meshes(&frend.gpu, mesh, 0, ..);
+}
 
 fn main() {
     let event_loop = winit::event_loop::EventLoop::new();
@@ -12,9 +96,6 @@ fn main() {
     let cache = assets_manager::AssetCache::with_source(source);
     let mut frend = frenderer::with_default_runtime(&window);
     let mut input = input::Input::default();
-    let fox = cache
-        .load::<assets_manager::asset::Gltf>("Fox")
-        .unwrap();
 
     let mut camera = Camera3D {
         translation: Vec3 {
@@ -33,67 +114,14 @@ fn main() {
     frend.meshes.set_camera(&frend.gpu, camera);
 
     let mut rng = rand::thread_rng();
-    const COUNT: usize = 10;
-    let fox = fox.read();
-    let fox_img = fox.get_image_by_index(0);
-    let fox_tex = frend.gpu.create_array_texture(
-        &[&fox_img.to_rgba8()],
-        frenderer::wgpu::TextureFormat::Rgba8Unorm,
-        (fox_img.width(), fox_img.height()),
-        Some("fox texture"),
-    );
-    let prim = fox
-        .document
-        .meshes()
-        .next()
-        .unwrap()
-        .primitives()
-        .next()
-        .unwrap();
-    let reader = prim.reader(|b| Some(fox.get_buffer_by_index(b.index())));
-    let verts: Vec<_> = reader
-        .read_positions()
-        .unwrap()
-        .zip(reader.read_tex_coords(0).unwrap().into_f32())
-        .map(|(position, uv)| frenderer::meshes::Vertex {
-            position,
-            uv,
-            which: 0,
-        })
-        .collect();
-    let vert_count = verts.len();
-    let fox_mesh = frend.meshes.add_mesh_group(
-        &frend.gpu,
-        &fox_tex,
-        verts,
-        (0..vert_count as u32).collect(),
-        vec![frenderer::meshes::MeshEntry {
-            instance_count: COUNT as u32,
-            submeshes: vec![frenderer::meshes::SubmeshEntry {
-                vertex_base: 0,
-                indices: 0..vert_count as u32,
-            }],
-        }],
-    );
-    for trf in frend.meshes.get_meshes_mut(fox_mesh, 0) {
-        *trf = Transform3D {
-            translation: Vec3 {
-                x: rng.gen_range(-400.0..400.0),
-                y: rng.gen_range(-300.0..300.0),
-                z: rng.gen_range(100.0..500.0),
-            }
-            .into(),
-            rotation: Quat::from_euler(
-                EulerRot::XYZ,
-                rng.gen_range(0.0..std::f32::consts::TAU),
-                rng.gen_range(0.0..std::f32::consts::TAU),
-                rng.gen_range(0.0..std::f32::consts::TAU),
-            )
-            .into(),
-            scale: rng.gen_range(0.5..1.0),
-        };
-    }
-    frend.meshes.upload_meshes(&frend.gpu, fox_mesh, 0, ..);
+
+    // define meshes using create_mesh
+    let fox_mesh = create_mesh(&cache, &mut frend, "Fox");
+    // let raccoon_mesh = create_mesh(&cache, &mut frend, "scene");
+
+    // apply transformations
+    transform_mesh(rng, &mut frend, fox_mesh);
+
     const DT: f32 = 1.0 / 60.0;
     const DT_FUDGE_AMOUNT: f32 = 0.0002;
     const DT_MAX: f32 = DT * 5.0;
@@ -113,7 +141,7 @@ fn main() {
             Event::MainEventsCleared => {
                 // compute elapsed time since last frame
                 let mut elapsed = now.elapsed().as_secs_f32();
-                println!("{elapsed}");
+                // println!("{elapsed}");
                 // snap time to nearby vsync framerate
                 TIME_SNAPS.iter().for_each(|s| {
                     if (elapsed - 1.0 / s).abs() < DT_FUDGE_AMOUNT {
@@ -142,8 +170,9 @@ fn main() {
                     //         ))
                     //     .into();
                     // }
-                    camera.translation[2] -= 100.0 * DT;
-                    frend.meshes.upload_meshes(&frend.gpu, fox_mesh, 0, ..);
+                    // camera.translation[2] -= 100.0 * DT;
+                    // iterate over meshes here
+                    // frend.meshes.upload_meshes(&frend.gpu, fox_mesh, 0, ..);
                     //println!("tick");
                     //update_game();
                     // camera.screen_pos[0] += 0.01;
