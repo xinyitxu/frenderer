@@ -2,6 +2,8 @@ use frenderer::{input, Camera3D, Transform3D, wgpu::{self, Color}};
 use glam::*;
 use rand::Rng;
 
+use crate::camera::Camera;
+
 // to run, do:
 // cargo run --bin test-gltf
 
@@ -39,6 +41,10 @@ fn main() {
         aspect: 1024.0 / 768.0,
     };
     frend.meshes.set_camera(&frend.gpu, camera);
+
+    let mut player_transform: Transform3D = Transform3D { translation: (camera.translation), scale: (1.0), rotation: (camera.rotation) };
+
+    let mut fpcamera: Camera = Camera {pitch: 0.0, player_pos: player_transform.translation.into(), player_rot: Quat::from_array(player_transform.rotation)};
 
     let mut rng = rand::thread_rng();
     const COUNT: usize = 10;
@@ -163,21 +169,23 @@ fn main() {
                      // MOVEMENT!
                         // arrow key movement
                     if input.is_key_down(winit::event::VirtualKeyCode::Left) {
-                        camera.translation[0] -= 100.0 * DT;
+                        player_transform.translation[0] -= 100.0 * DT;
                     }
                     else if input.is_key_down(winit::event::VirtualKeyCode::Right) {
-                        camera.translation[0] += 100.0 * DT;
+                        player_transform.translation[0] += 100.0 * DT;
                     }
 
                     if input.is_key_down(winit::event::VirtualKeyCode::Up) {
-                        camera.translation[2] += 100.0 * DT;
+                        player_transform.translation[2] += 100.0 * DT;
                     }
                     else if input.is_key_down(winit::event::VirtualKeyCode::Down) {
-                        camera.translation[2] -= 100.0 * DT;
+                        player_transform.translation[2] -= 100.0 * DT;
                     }
 
                 }
                 // Render prep
+                fpcamera.update(&input, &player_transform);
+                fpcamera.update_camera(&mut camera);
                 frend.meshes.set_camera(&frend.gpu, camera);
                 // update sprite positions and sheet regions
                 // ok now render.

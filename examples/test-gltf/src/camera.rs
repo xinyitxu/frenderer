@@ -3,18 +3,18 @@ use glam::*;
 
 pub struct Camera {
     pub pitch: f32,
-    player_pos: Vec3,
-    player_rot: Quat,
+    pub player_pos: Vec3,
+    pub player_rot: Quat,
 }
 impl Camera {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             pitch: 0.0,
             player_pos: Vec3::ZERO,
             player_rot: Quat::default(),
         }
     }
-    fn update(&mut self, input: &frenderer::input::Input, player: &Transform3D) {
+    pub fn update(&mut self, input: &frenderer::input::Input, player: &Transform3D) {
         use frenderer::input::MousePos;
         use std::f32::consts::FRAC_PI_2;
         let MousePos { y: dy, .. } = input.mouse_delta();
@@ -25,7 +25,7 @@ impl Camera {
         self.player_pos = player.translation.into();
         self.player_rot = Quat::from_array(player.rotation);
     }
-    fn update_camera(&self, c: &mut Camera3D) {
+    pub fn update_camera(&self, c: &mut Camera3D) {
         // The camera's position is offset from the player's position.
         c.translation = (self.player_pos
         // So, <0, 25, 2> in the player's local frame will need
