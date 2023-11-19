@@ -1,57 +1,15 @@
-use frenderer::{input, Camera3D, Transform3D};
+use frenderer::{input, Camera3D, Transform3D, wgpu::{self, Color}};
 use glam::*;
 use rand::Rng;
 
 // to run, do:
 // cargo run --bin test-gltf
 
+mod camera;
 
-/*
-pub struct fpcamera {
-    pub pitch: f32,
-    player_pos: Vec3,
-    player_rot: Rotor3,
-}
-impl fpcamera {
-    fn new() -> Self {
-        Self {
-            pitch: 0.0,
-            player_pos: Vec3::zero(),
-            player_rot: Rotor3::identity(),
-        }
-    }
-    fn update(&mut self, input: &frenderer::Input, player: &Player) {
-        let MousePos { y: dy, .. } = input.mouse_delta();
-        self.pitch += DT as f32 * dy as f32 / 10.0;
-        // Make sure pitch isn't directly up or down (that would put
-        // `eye` and `at` at the same z, which is Bad)
-        self.pitch = self.pitch.clamp(-PI / 2.0 + 0.001, PI / 2.0 - 0.001);
-        self.player_pos = player.trf.translation;
-        self.player_rot = player.trf.rotation;
-    }
-    fn update_camera(&self, c: &mut Camera) {
-        // The camera's position is offset from the player's position.
-        let eye = self.player_pos
-        // So, <0, 25, 2> in the player's local frame will need
-        // to be rotated into world coordinates. Multiply by the player's rotation:
-            + self.player_rot * Vec3::new(0.0, 25.0, 2.0);
+const DT: f32 = 1.0 / 60.0;
+const BACKGROUND_COLOR: wgpu::Color = Color {r: 0.0/255.0, g: 200.0/255.0, b: 255.0/255.0, a: 1.0};
 
-        // Next is the trickiest part of the code.
-        // We want to rotate the camera around the way the player is
-        // facing, then rotate it more to pitch is up or down.
-
-        // We need to turn this rotation into a target vector (at) by
-        // picking a point a bit "in front of" the eye point with
-        // respect to our rotation.  This means composing two
-        // rotations (player and camera) and rotating the unit forward
-        // vector around by that composed rotation, then adding that
-        // to the camera's position to get the target point.
-        // So, we're adding a position and an offset to obtain a new position.
-        let at = eye + self.player_rot * Rotor3::from_rotation_yz(self.pitch) * Vec3::unit_z();
-        *c = Camera::look_at(eye, at, Vec3::unit_y());
-    }
-}
- */
 fn main() {
     let event_loop = winit::event_loop::EventLoop::new();
     let window = winit::window::Window::new(&event_loop).unwrap();
@@ -144,7 +102,6 @@ fn main() {
         };
     }
     frend.meshes.upload_meshes(&frend.gpu, fox_mesh, 0, ..);
-    const DT: f32 = 1.0 / 60.0;
     const DT_FUDGE_AMOUNT: f32 = 0.0002;
     const DT_MAX: f32 = DT * 5.0;
     const TIME_SNAPS: [f32; 5] = [15.0, 30.0, 60.0, 120.0, 144.0];
@@ -224,7 +181,37 @@ fn main() {
                 frend.meshes.set_camera(&frend.gpu, camera);
                 // update sprite positions and sheet regions
                 // ok now render.
-                frend.render();
+                
+                //frend.render();
+                // THIS LINE CAN BE REPLACED BY that super long series of things 
+                                 let (frame, view, mut encoder) = frend.render_setup();
+                 {
+                     // This is us manually making a renderpass
+                     let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                         label: None,
+                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                             view: &view,
+                             resolve_target: None,
+                             ops: frenderer::wgpu::Operations {
+                                 load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
+                                 store: true,
+                             },
+                         })],
+                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                             view: &frend.gpu.depth_texture_view,
+                             depth_ops: Some(wgpu::Operations {
+                                 load: wgpu::LoadOp::Clear(1.0),
+                                 store: true,
+                             }),
+                            stencil_ops: None,
+                         }),
+                     });
+                     // frend has render_into to do the actual rendering
+                     frend.render_into(&mut rpass);
+                }
+                // // This just submits the command encoder and presents the frame, we wouldn't need it if we did that some other way.
+                frend.render_finish(frame, encoder);
+
                 window.request_redraw();
             }
             event => {
