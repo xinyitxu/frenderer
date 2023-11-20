@@ -9,8 +9,12 @@ use crate::camera::Camera;
 
 mod camera;
 
+use std::f32::consts::PI;
+
 const DT: f32 = 1.0 / 60.0;
 const BACKGROUND_COLOR: wgpu::Color = Color {r: 0.0/255.0, g: 200.0/255.0, b: 255.0/255.0, a: 1.0};
+
+const player_speed: f32 = 100.0;
 
 fn main() {
     let event_loop = winit::event_loop::EventLoop::new();
@@ -44,7 +48,7 @@ fn main() {
 
     let mut player_transform: Transform3D = Transform3D { translation: (camera.translation), scale: (1.0), rotation: (camera.rotation) };
 
-    let mut fpcamera: Camera = Camera {pitch: 0.0, player_pos: player_transform.translation.into(), player_rot: Quat::from_array(player_transform.rotation)};
+    let mut fpcamera: Camera = Camera {pitch: 0.0, yaw: 0.0, player_pos: player_transform.translation.into(), player_rot: Quat::from_array(player_transform.rotation)};
 
     let mut rng = rand::thread_rng();
     const COUNT: usize = 10;
@@ -167,31 +171,66 @@ fn main() {
 
 
                      // MOVEMENT!
-                        // arrow key movement
-                    if input.is_key_down(winit::event::VirtualKeyCode::Left) {
-                        player_transform.translation[0] -= 100.0 * DT;
+                        // arrow key or WASD movement
+                        // player_transform.translation[2] goes UP when we walk forwards (yaw = 0)
+
+                        // TODO: make it so movement now deals with sin and cos to move in the right direction based on rotation
+
+                    let mut current_yaw_degrees = fpcamera.yaw * 180.0 / PI;
+                    if current_yaw_degrees < 0.0 {
+                        current_yaw_degrees += 360.0;
+                        }
+                    let mut current_yaw_radians = current_yaw_degrees * (PI / 180.0);
+                    if input.is_key_down(winit::event::VirtualKeyCode::Left) || input.is_key_down(winit::event::VirtualKeyCode::A) {
+                        player_transform.translation[0] -= player_speed * DT * f32::cos(current_yaw_radians);
+                        player_transform.translation[2] -= player_speed * DT * f32::sin(current_yaw_radians);
                     }
-                    else if input.is_key_down(winit::event::VirtualKeyCode::Right) {
-                        player_transform.translation[0] += 100.0 * DT;
+                  
+                    else if input.is_key_down(winit::event::VirtualKeyCode::Right) || input.is_key_down(winit::event::VirtualKeyCode::D) {
+                        player_transform.translation[0] += player_speed * DT * f32::cos(current_yaw_radians);
+                        player_transform.translation[2] += player_speed * DT * f32::sin(current_yaw_radians);
                     }
 
-                    if input.is_key_down(winit::event::VirtualKeyCode::Up) {
-                        player_transform.translation[2] += 100.0 * DT;
+                    if input.is_key_down(winit::event::VirtualKeyCode::Up) || input.is_key_down(winit::event::VirtualKeyCode::W) {
+                        player_transform.translation[0] -= player_speed * DT * f32::sin(current_yaw_radians);
+                        player_transform.translation[2] += player_speed * DT * f32::cos(current_yaw_radians);
+
                     }
-                    else if input.is_key_down(winit::event::VirtualKeyCode::Down) {
-                        player_transform.translation[2] -= 100.0 * DT;
+                    else if input.is_key_down(winit::event::VirtualKeyCode::Down) || input.is_key_down(winit::event::VirtualKeyCode::S) {
+                        player_transform.translation[0] += player_speed * DT * f32::sin(current_yaw_radians);
+                        player_transform.translation[2] -= player_speed * DT * f32::cos(current_yaw_radians);
                     }
+
+                    // shortcut for resetting camera rotation
+                    if input.is_key_down(winit::event::VirtualKeyCode::R) {
+                        println!("resetting camera rotation...");
+                        fpcamera.pitch = 0.0;
+                        fpcamera.yaw = 0.0;
+                    }
+
+                    // shortcut for resetting camera position
+                    if input.is_key_down(winit::event::VirtualKeyCode::T) {
+                        println!("resetting camera position...");
+                        player_transform.translation = Vec3 { x:0.0, y:0.0, z:0.0 }.into();
+                    }
+
+                    println!("sin: {}, cos: {}, pos x: {}, pos z: {}", f32::sin(current_yaw_radians), f32::cos(current_yaw_radians), player_transform.translation[0], player_transform.translation[2]);
+                    //println!("{}, {}", player_transform.translation[0], player_transform.translation[2]);
 
                 }
                 // Render prep
+                
+                // "update" updates the fpcamera's pitch and yaw, also sets fpcamera's position and rotation to the player_transform's position and rotation
                 fpcamera.update(&input, &player_transform);
+                // "update_camera" sets the actual camera's translation and rotation to fpcamera's
                 fpcamera.update_camera(&mut camera);
+                //player_transform.rotation = fpcamera.player_rot.into();
                 frend.meshes.set_camera(&frend.gpu, camera);
                 // update sprite positions and sheet regions
                 // ok now render.
                 
                 //frend.render();
-                // THIS LINE CAN BE REPLACED BY that super long series of things 
+                // THIS LINE CAN BE REPLACED BY the following lines:
                                  let (frame, view, mut encoder) = frend.render_setup();
                  {
                      // This is us manually making a renderpass

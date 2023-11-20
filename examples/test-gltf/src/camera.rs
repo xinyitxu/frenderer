@@ -3,6 +3,7 @@ use glam::*;
 
 pub struct Camera {
     pub pitch: f32,
+    pub yaw: f32,
     pub player_pos: Vec3,
     pub player_rot: Quat,
 }
@@ -10,6 +11,7 @@ impl Camera {
     pub fn new() -> Self {
         Self {
             pitch: 0.0,
+            yaw: 0.0,
             player_pos: Vec3::ZERO,
             player_rot: Quat::default(),
         }
@@ -17,8 +19,9 @@ impl Camera {
     pub fn update(&mut self, input: &frenderer::input::Input, player: &Transform3D) {
         use frenderer::input::MousePos;
         use std::f32::consts::FRAC_PI_2;
-        let MousePos { y: dy, .. } = input.mouse_delta();
-        self.pitch += super::DT as f32 * dy as f32 / 10.0;
+        let MousePos { y: dy, x: dx } = input.mouse_delta();
+        self.pitch -= super::DT as f32 * dy as f32 / 10.0;
+        self.yaw -= super::DT as f32 * dx as f32 / 10.0;
         // Make sure pitch isn't directly up or down (that would put
         // `eye` and `at` at the same z, which is Bad)
         self.pitch = self.pitch.clamp(-FRAC_PI_2 + 0.001, FRAC_PI_2 - 0.001);
@@ -44,7 +47,7 @@ impl Camera {
         // to the camera's position to get the target point.
         // So, we're adding a position and an offset to obtain a new position.
 
-        c.rotation = (self.player_rot * Quat::from_rotation_x(self.pitch)).into();
+        c.rotation = (self.player_rot * (Quat::from_rotation_x(self.pitch) * Quat::from_rotation_y(self.yaw))).into();
 
     }
 }
